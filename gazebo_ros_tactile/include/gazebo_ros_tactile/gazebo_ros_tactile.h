@@ -46,12 +46,18 @@
 #include <gazebo/sensors/SensorTypes.hh>
 #include <gazebo/sensors/ContactSensor.hh>
 #include <gazebo/common/Plugin.hh>
+#include <ignition/math/Vector3.hh>
 
 #include <urdf_tactile/tactile.h>
 #include <urdf/sensor.h>
 
 namespace gazebo
 {
+
+namespace math {
+typedef ignition::math::Vector3<double> Vector3;
+}
+
 /// \brief A Bumper controller
 class GazeboRosTactile : public SensorPlugin
 {
