@@ -32,9 +32,16 @@
 #include <string>
 
 #include <gazebo/common/Exception.hh>
+#include <gazebo/gazebo_config.h>
+#if GAZEBO_MAJOR_VERSION >= 7
+#include <ignition/math/Pose3.hh>
+#include <ignition/math/Quaternion.hh>
+#include <ignition/math/Vector3.hh>
+#else
 #include <gazebo/math/Pose.hh>
 #include <gazebo/math/Quaternion.hh>
 #include <gazebo/math/Vector3.hh>
+#endif
 #include <gazebo/physics/Contact.hh>
 #include <gazebo/physics/World.hh>
 #include <gazebo/sensors/Sensor.hh>
@@ -143,7 +150,11 @@ void GazeboRosContact::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
 
   // lock in case a model is being spawned
   // boost::recursive_mutex::scoped_lock lock(*gazebo::Simulator::Instance()->GetMRMutex());
+#if GAZEBO_MAJOR_VERSION >= 8
+  physics::Model_V all_models = world_->Models();
+#else
   physics::Model_V all_models = world_->GetModels();
+#endif
 
   // if frameName specified is "world", "/map" or "map" report back
   // inertial values in the gazebo world.
@@ -241,7 +252,11 @@ void GazeboRosContact::OnContact()
   this->contact_state_msg_.header.frame_id = this->frame_id_name_;
 
   ros::Time contact_time;
+#if GAZEBO_MAJOR_VERSION >= 8
+  common::Time gazebotime = this->world_->SimTime();
+#else
   common::Time gazebotime = this->world_->GetSimTime();
+#endif
   common::Time meastime = this->parentSensor->LastMeasurementTime();
   ROS_DEBUG_STREAM("sim time " << gazebotime.sec << "," << gazebotime.nsec);
   ROS_DEBUG_STREAM("measurement time " << meastime.sec << "," << meastime.nsec);
@@ -252,31 +267,64 @@ void GazeboRosContact::OnContact()
 
   // get reference frame (body(link)) pose and subtract from it to get
   // relative force, torque, position and normal vectors
+#if GAZEBO_MAJOR_VERSION >= 7
+  ignition::math::Pose3d pose, frame_pose, local_pose;
+  ignition::math::Quaterniond rot, frame_rot, local_rot;
+  ignition::math::Vector3d pos, frame_pos, local_pos;
+#else
   math::Pose pose, frame_pose, local_pose;
   math::Quaternion rot, frame_rot, local_rot;
   math::Vector3 pos, frame_pos, local_pos;
+#endif
+  
 
   // Get local link orientation
   if (local_link_)
   {
+#if GAZEBO_MAJOR_VERSION >= 7
+ #if GAZEBO_MAJOR_VERSION >= 8
+    local_pose = local_link_->WorldPose();
+ #else
+    local_pose = local_link_->GetWorldPose().Ign();
+ #endif
+    local_pos = local_pose.Pos();
+    local_rot = local_pose.Rot();
+#else
     local_pose = local_link_->GetWorldPose();
     local_pos = local_pose.pos;
     local_rot = local_pose.rot;
+#endif
   }
   // Get frame orientation if frame_id is given
   if (my_link_)
   {
-    frame_pose = my_link_->GetWorldPose();  //-this->myBody->GetCoMPose();->GetDirtyPose();
+#if GAZEBO_MAJOR_VERSION >= 7
+ #if GAZEBO_MAJOR_VERSION >= 8
+    frame_pose = my_link_->WorldPose();
+ #else
+    frame_pose = my_link_->GetWorldPose().Ign(); // -this->myBody->GetCoMPose();->GetDirtyPose();
+ #endif
+    frame_pos = frame_pose.Pos();
+    frame_rot = frame_pose.Rot();
+#else
+    frame_pose = my_link_->GetWorldPose();
     frame_pos = frame_pose.pos;
     frame_rot = frame_pose.rot;
+#endif
   }
   else
   {
     // no specific frames specified, use identity pose, keeping
     // relative frame at inertial origin
+#if GAZEBO_MAJOR_VERSION >= 7
+    frame_pos = ignition::math::Vector3d(0, 0, 0);
+    frame_rot = ignition::math::Quaterniond(1, 0, 0, 0);  // gazebo u,x,y,z == identity
+    frame_pose = ignition::math::Pose3d(frame_pos, frame_rot);
+#else
     frame_pos = math::Vector3(0, 0, 0);
     frame_rot = math::Quaternion(1, 0, 0, 0);  // gazebo u,x,y,z == identity
     frame_pose = math::Pose(frame_pos, frame_rot);
+#endif
   }
 
   geometry_msgs::Wrench total_wrench;
@@ -356,6 +404,23 @@ void GazeboRosContact::OnContact()
       else
         source_wrench = contact.wrench(j).body_1_wrench();
 
+#if GAZEBO_MAJOR_VERSION >= 7
+      ignition::math::Vector3d force;
+      ignition::math::Vector3d torque;
+      // apply transform to force/torque only if needed
+      if (skip_local_transform_)
+      {
+        force = ignition::math::Vector3d(source_wrench.force().x(), source_wrench.force().y(), source_wrench.force().z());
+        torque = ignition::math::Vector3d(source_wrench.torque().x(), source_wrench.torque().y(), source_wrench.torque().z());
+      }
+      else
+      {
+        force = frame_rot.RotateVectorReverse(local_rot.RotateVector(
+          ignition::math::Vector3d(source_wrench.force().x(), source_wrench.force().y(), source_wrench.force().z())));
+        torque = frame_rot.RotateVectorReverse(local_rot.RotateVector(
+          ignition::math::Vector3d(source_wrench.torque().x(), source_wrench.torque().y(), source_wrench.torque().z())));
+      }
+#else
       math::Vector3 force;
       math::Vector3 torque;
       // apply transform to force/torque only if needed
@@ -366,69 +431,111 @@ void GazeboRosContact::OnContact()
       }
       else
       {
-        force= frame_rot.RotateVectorReverse(local_rot.RotateVector(
+        force = frame_rot.RotateVectorReverse(local_rot.RotateVector(
           math::Vector3(source_wrench.force().x(), source_wrench.force().y(), source_wrench.force().z())));
         torque = frame_rot.RotateVectorReverse(local_rot.RotateVector(
           math::Vector3(source_wrench.torque().x(), source_wrench.torque().y(), source_wrench.torque().z())));
       }
+#endif
+
       // set contact wrenches
       geometry_msgs::Wrench wrench;
+#if GAZEBO_MAJOR_VERSION >= 7
+      wrench.force.x = force.X();
+      wrench.force.y = force.Y();
+      wrench.force.z = force.Z();
+      wrench.torque.x = torque.X();
+      wrench.torque.y = torque.Y();
+      wrench.torque.z = torque.Z();
+#else
       wrench.force.x = force.x;
       wrench.force.y = force.y;
       wrench.force.z = force.z;
       wrench.torque.x = torque.x;
       wrench.torque.y = torque.y;
       wrench.torque.z = torque.z;
+#endif
       state.wrenches.push_back(wrench);
 
       // vector sum of forces and torques
-      total_wrench.force.x += force.x;
-      total_wrench.force.y += force.y;
-      total_wrench.force.z += force.z;
-      total_wrench.torque.x += torque.x;
-      total_wrench.torque.y += torque.y;
-      total_wrench.torque.z += torque.z;
+      total_wrench.force.x += wrench.force.x;
+      total_wrench.force.y += wrench.force.y;
+      total_wrench.force.z += wrench.force.z;
+      total_wrench.torque.x += wrench.torque.x;
+      total_wrench.torque.y += wrench.torque.y;
+      total_wrench.torque.z += wrench.torque.z;
 
       // rotate normal from world into user specified frame.
       // frame_rot is identity if world is used.
+#if GAZEBO_MAJOR_VERSION >= 7
+      ignition::math::Vector3d normal = frame_rot.RotateVectorReverse(
+        ignition::math::Vector3d(contact.normal(j).x(), contact.normal(j).y(), contact.normal(j).z()));
+#else
       math::Vector3 normal = frame_rot.RotateVectorReverse(
         math::Vector3(contact.normal(j).x(), contact.normal(j).y(), contact.normal(j).z()));
+#endif
 
       // set contact normals pointing outwards of the collision object
       geometry_msgs::Vector3 contact_normal;
-      contact_normal.x = (switch_body?1.0:-1.0) * normal.x;
-      contact_normal.y = (switch_body?1.0:-1.0) * normal.y;
-      contact_normal.z = (switch_body?1.0:-1.0) * normal.z;
-      state.contact_normals.push_back(contact_normal);
-
+#if GAZEBO_MAJOR_VERSION >= 7
+      contact_normal.x = (switch_body ? 1.0:-1.0) * normal.X();
+      contact_normal.y = (switch_body ? 1.0:-1.0) * normal.Y();
+      contact_normal.z = (switch_body ? 1.0:-1.0) * normal.Z();
+      // vector sum of normals
+      total_normal.x += normal.X();
+      total_normal.y += normal.Y();
+      total_normal.z += normal.Z();
+#else
+      contact_normal.x = (switch_body ? 1.0:-1.0) * normal.x;
+      contact_normal.y = (switch_body ? 1.0:-1.0) * normal.y;
+      contact_normal.z = (switch_body ? 1.0:-1.0) * normal.z;
       // vector sum of normals
       total_normal.x += normal.x;
       total_normal.y += normal.y;
       total_normal.z += normal.z;
+#endif
+      state.contact_normals.push_back(contact_normal);
 
       // force amplitude
+#if GAZEBO_MAJOR_VERSION >= 7
+      double force_length = force.Length();
+#else
       double force_length = force.GetLength();
+#endif
 
       // transform contact positions from world frame into user frame
-      // set contact positions
-      gazebo::math::Vector3 position = frame_rot.RotateVectorReverse(
-        math::Vector3(contact.position(j).x(), contact.position(j).y(), contact.position(j).z()) - frame_pos);
-
       // set contact position
       geometry_msgs::Vector3 contact_position;
+#if GAZEBO_MAJOR_VERSION >= 7
+      ignition::math::Vector3d position = frame_rot.RotateVectorReverse(
+        ignition::math::Vector3d(contact.position(j).x(), contact.position(j).y(), contact.position(j).z()) - frame_pos);
+      contact_position.x = position.X();
+      contact_position.y = position.Y();
+      contact_position.z = position.Z();
+      // average position weighted on force amplitude
+      total_position.x += position.X() * force_length;
+      total_position.y += position.Y() * force_length;
+      total_position.z += position.Z() * force_length;
+#else
+      gazebo::math::Vector3 position = frame_rot.RotateVectorReverse(
+        math::Vector3(contact.position(j).x(), contact.position(j).y(), contact.position(j).z()) - frame_pos);
       contact_position.x = position.x;
       contact_position.y = position.y;
       contact_position.z = position.z;
-      state.contact_positions.push_back(contact_position);
-
       // average position weighted on force amplitude
       total_position.x += position.x * force_length;
       total_position.y += position.y * force_length;
       total_position.z += position.z * force_length;
+#endif
+      state.contact_positions.push_back(contact_position);
 
       // sum of all the force amplitudes
       total_force_lengths += force_length;
+#if GAZEBO_MAJOR_VERSION >= 7
+      total_normal_lengths += normal.Length();
+#else
       total_normal_lengths += normal.GetLength();
+#endif
 
       // set contact depth, interpenetration
       state.depths.push_back(contact.depth(j));

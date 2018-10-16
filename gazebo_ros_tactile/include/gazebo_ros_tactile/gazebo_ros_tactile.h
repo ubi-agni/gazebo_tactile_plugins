@@ -46,17 +46,17 @@
 #include <gazebo/sensors/SensorTypes.hh>
 #include <gazebo/sensors/ContactSensor.hh>
 #include <gazebo/common/Plugin.hh>
+#if GAZEBO_MAJOR_VERSION >= 7
 #include <ignition/math/Vector3.hh>
+#include <ignition/math/Pose3.hh>
+#include <ignition/math/Quaternion.hh>
+#endif
 
 #include <urdf_tactile/tactile.h>
 #include <urdf/sensor.h>
 
 namespace gazebo
 {
-
-namespace math {
-typedef ignition::math::Vector3<double> Vector3;
-}
 
 /// \brief A Bumper controller
 class GazeboRosTactile : public SensorPlugin
@@ -153,10 +153,13 @@ private:
 
   // for Parsing
   urdf::SensorMap sensors;
-
+#if GAZEBO_MAJOR_VERSION >= 7
+  std::vector<std::vector<ignition::math::Vector3d>> taxelNormals;
+  std::vector<std::vector<ignition::math::Vector3d>> taxelPositions;
+#else
   std::vector<std::vector<gazebo::math::Vector3>> taxelNormals;
   std::vector<std::vector<gazebo::math::Vector3>> taxelPositions;
-
+#endif
   unsigned int numOfSensors;
   std::vector<unsigned int> numOfTaxels;
   float forceSensitivity;

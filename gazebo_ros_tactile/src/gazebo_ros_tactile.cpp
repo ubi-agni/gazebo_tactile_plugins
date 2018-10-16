@@ -32,9 +32,11 @@
 #include <vector>
 
 #include <gazebo/common/Exception.hh>
+#if GAZEBO_MAJOR_VERSION >= 7
 #include <ignition/math/Pose3.hh>
 #include <ignition/math/Quaternion.hh>
 #include <ignition/math/Vector3.hh>
+#endif
 #include <gazebo/physics/Contact.hh>
 #include <gazebo/physics/World.hh>
 #include <gazebo/sensors/Sensor.hh>
@@ -56,10 +58,6 @@
 namespace gazebo
 {
 
-namespace math {
-typedef ignition::math::Pose3<double> Pose;
-typedef ignition::math::Quaternion<double> Quaternion;
-}
 
 // Register this plugin with the simulator
 GZ_REGISTER_SENSOR_PLUGIN(GazeboRosTactile)
@@ -216,10 +214,17 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
 
       // Intiaization: push back and resize
       this->numOfTaxels.push_back((rows) * (cols));
+#if GAZEBO_MAJOR_VERSION >= 7
+      this->taxelNormals.push_back(
+        std::vector<ignition::math::Vector3d>(numOfTaxels[this->numOfSensors], ignition::math::Vector3d(0, 0, 0)));
+      this->taxelPositions.push_back(
+        std::vector<ignition::math::Vector3d>(numOfTaxels[this->numOfSensors], ignition::math::Vector3d(0, 0, 0)));
+#else
       this->taxelNormals.push_back(
         std::vector<gazebo::math::Vector3>(numOfTaxels[this->numOfSensors], gazebo::math::Vector3(0, 0, 0)));
       this->taxelPositions.push_back(
         std::vector<gazebo::math::Vector3>(numOfTaxels[this->numOfSensors], gazebo::math::Vector3(0, 0, 0)));
+#endif
       sensor_msgs::ChannelFloat32 channel;
       channel.values.resize(numOfTaxels[this->numOfSensors]);
       this->tactile_state_msg_.sensors.push_back(channel);
@@ -232,10 +237,17 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
         {
           for (int col_idx = 0; col_idx < cols; col_idx++)
           {
+#if GAZEBO_MAJOR_VERSION >= 7
+            this->taxelPositions[this->numOfSensors][cols * row_idx + col_idx] =
+              ignition::math::Vector3d((-offset.x + col_idx * (spacing.x)), (-offset.y + row_idx * (spacing.y)), 0);
+
+            this->taxelNormals[this->numOfSensors][cols * row_idx + col_idx] = ignition::math::Vector3d(0, 0, 1.0);
+#else
             this->taxelPositions[this->numOfSensors][cols * row_idx + col_idx] =
               gazebo::math::Vector3((-offset.x + col_idx * (spacing.x)), (-offset.y + row_idx * (spacing.y)), 0);
 
             this->taxelNormals[this->numOfSensors][cols * row_idx + col_idx] = gazebo::math::Vector3(0, 0, 1.0);
+#endif
           }
         }
       }
@@ -246,10 +258,18 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
         {
           for (int col_idx = 0; col_idx < cols; col_idx++)
           {
+#if GAZEBO_MAJOR_VERSION >= 7
+            this->taxelPositions[this->numOfSensors][rows * col_idx + row_idx] =
+              ignition::math::Vector3d((-offset.x + col_idx * (spacing.x)), (-offset.y + row_idx * (spacing.y)), 0);
+
+            this->taxelNormals[this->numOfSensors][cols * row_idx + col_idx] = ignition::math::Vector3d(0, 0, 1.0);
+#else
             this->taxelPositions[this->numOfSensors][rows * col_idx + row_idx] =
               gazebo::math::Vector3((-offset.x + col_idx * (spacing.x)), (-offset.y + row_idx * (spacing.y)), 0);
 
             this->taxelNormals[this->numOfSensors][cols * row_idx + col_idx] = gazebo::math::Vector3(0, 0, 1.0);
+#endif
+
           }
         }
       }
@@ -264,10 +284,17 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
     {
       // Intiaization: push back and resize
       this->numOfTaxels.push_back(sensor->taxels_.size());
+#if GAZEBO_MAJOR_VERSION >= 7
+      this->taxelNormals.push_back(std::vector<ignition::math::Vector3d>(
+        numOfTaxels[this->numOfSensors], ignition::math::Vector3d(0, 0, 0)));  // [i].resize(numOfTaxels[i]);
+      this->taxelPositions.push_back(std::vector<ignition::math::Vector3d>(
+        numOfTaxels[this->numOfSensors], ignition::math::Vector3d(0, 0, 0)));  // [i].resize(numOfTaxels[i]);
+#else
       this->taxelNormals.push_back(std::vector<gazebo::math::Vector3>(
         numOfTaxels[this->numOfSensors], gazebo::math::Vector3(0, 0, 0)));  // [i].resize(numOfTaxels[i]);
       this->taxelPositions.push_back(std::vector<gazebo::math::Vector3>(
         numOfTaxels[this->numOfSensors], gazebo::math::Vector3(0, 0, 0)));  // [i].resize(numOfTaxels[i]);
+#endif
       sensor_msgs::ChannelFloat32 channel;
       channel.values.resize(numOfTaxels[this->numOfSensors]);
       this->tactile_state_msg_.sensors.push_back(channel);
@@ -275,15 +302,25 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
       // Fill an array with the positions and normals of the taxels of the sensor
       for (unsigned int j = 0; j < numOfTaxels[this->numOfSensors]; j++)
       {
+#if GAZEBO_MAJOR_VERSION >= 7
+        this->taxelPositions[this->numOfSensors][j] =
+          ignition::math::Vector3d(sensor->taxels_[j]->origin.position.x, sensor->taxels_[j]->origin.position.y,
+                                sensor->taxels_[j]->origin.position.z);
+#else
         this->taxelPositions[this->numOfSensors][j] =
           gazebo::math::Vector3(sensor->taxels_[j]->origin.position.x, sensor->taxels_[j]->origin.position.y,
                                 sensor->taxels_[j]->origin.position.z);
-
+#endif
         // normal=rotation times zAxis
         urdf::Vector3 zAxis(0, 0, 1);
         urdf::Vector3 urdfTaxelNormal = (sensor->taxels_[j]->origin.rotation) * zAxis;
+#if GAZEBO_MAJOR_VERSION >= 7
+        this->taxelNormals[this->numOfSensors][j] =
+          ignition::math::Vector3d(urdfTaxelNormal.x, urdfTaxelNormal.y, urdfTaxelNormal.z);
+#else
         this->taxelNormals[this->numOfSensors][j] =
           gazebo::math::Vector3(urdfTaxelNormal.x, urdfTaxelNormal.y, urdfTaxelNormal.z);
+#endif
       }
     }
     this->tactile_state_msg_.sensors[numOfSensors].name = sensor->channel_;
@@ -333,7 +370,11 @@ void GazeboRosTactile::TransformFrameInit()
 
   // lock in case a model is being spawned
   // boost::recursive_mutex::scoped_lock lock(*gazebo::Simulator::Instance()->GetMRMutex());
+#if GAZEBO_MAJOR_VERSION >= 8
   physics::Model_V all_models = world_->Models();
+#else
+  physics::Model_V all_models = world_->GetModels();
+#endif
 
   // if frameName specified is "world", "/map" or "map" report back
   // inertial values in the gazebo world.
@@ -438,32 +479,63 @@ void GazeboRosTactile::OnContact()
 
   // get reference frame (body(link)) pose and subtract from it to get
   // relative force, torque, position and normal vectors
+#if GAZEBO_MAJOR_VERSION >= 7
+  ignition::math::Pose3d pose, frame_pose, local_pose;
+  ignition::math::Quaterniond rot, frame_rot, local_rot;
+  ignition::math::Vector3d pos, frame_pos, local_pos;
+#else
   math::Pose pose, frame_pose, local_pose;
   math::Quaternion rot, frame_rot, local_rot;
   math::Vector3 pos, frame_pos, local_pos;
-
+#endif
   // float forceSensitivity = 0.1f;
   // Get local link orientation
   if (local_link_)
   {
+#if GAZEBO_MAJOR_VERSION >= 7
+ #if GAZEBO_MAJOR_VERSION >= 8
     local_pose = local_link_->WorldPose();
+ #else
+    local_pose = local_link_->GetWorldPose().Ign();
+ #endif
     local_pos = local_pose.Pos();
     local_rot = local_pose.Rot();
+#else
+    local_pose = local_link_->GetWorldPose();
+    local_pos = local_pose.pos;
+    local_rot = local_pose.rot;
+#endif
   }
   // Get frame orientation if frame_id is given
   if (my_link_)
   {
-    frame_pose = my_link_->WorldPose();  // -this->myBody->GetCoMPose();->GetDirtyPose();
+#if GAZEBO_MAJOR_VERSION >= 7
+ #if GAZEBO_MAJOR_VERSION >= 8
+    frame_pose = my_link_->WorldPose();
+ #else
+    frame_pose = my_link_->GetWorldPose().Ign(); // -this->myBody->GetCoMPose();->GetDirtyPose();
+ #endif
     frame_pos = frame_pose.Pos();
     frame_rot = frame_pose.Rot();
+#else
+    frame_pose = my_link_->GetWorldPose();
+    frame_pos = frame_pose.pos;
+    frame_rot = frame_pose.rot;
+#endif
   }
   else
   {
     // no specific frames specified, use identity pose, keeping
     // relative frame at inertial origin
+#if GAZEBO_MAJOR_VERSION >= 7
+    frame_pos = ignition::math::Vector3d(0, 0, 0);
+    frame_rot = ignition::math::Quaterniond(1, 0, 0, 0);  // gazebo u,x,y,z == identity
+    frame_pose = ignition::math::Pose3d(frame_pos, frame_rot);
+#else
     frame_pos = math::Vector3(0, 0, 0);
     frame_rot = math::Quaternion(1, 0, 0, 0);  // gazebo u,x,y,z == identity
     frame_pose = math::Pose(frame_pos, frame_rot);
+#endif
   }
 
   // ROS_INFO_STREAM_THROTTLE(1.0, "frame_pos" << frame_pos.x << "frame_rot" <<
@@ -554,6 +626,23 @@ void GazeboRosTactile::OnContact()
       else
         source_wrench = contact.wrench(j).body_1_wrench();
 
+#if GAZEBO_MAJOR_VERSION >= 7
+      ignition::math::Vector3d force;
+      ignition::math::Vector3d torque;
+      // apply transform to force/torque only if needed
+      if (skip_local_transform_)
+      {
+        force = ignition::math::Vector3d(source_wrench.force().x(), source_wrench.force().y(), source_wrench.force().z());
+        torque = ignition::math::Vector3d(source_wrench.torque().x(), source_wrench.torque().y(), source_wrench.torque().z());
+      }
+      else
+      {
+        force = frame_rot.RotateVectorReverse(local_rot.RotateVector(
+          ignition::math::Vector3d(source_wrench.force().x(), source_wrench.force().y(), source_wrench.force().z())));
+        torque = frame_rot.RotateVectorReverse(local_rot.RotateVector(
+          ignition::math::Vector3d(source_wrench.torque().x(), source_wrench.torque().y(), source_wrench.torque().z())));
+      }
+#else
       math::Vector3 force;
       math::Vector3 torque;
       // apply transform to force/torque only if needed
@@ -569,15 +658,25 @@ void GazeboRosTactile::OnContact()
         torque = frame_rot.RotateVectorReverse(local_rot.RotateVector(
           math::Vector3(source_wrench.torque().x(), source_wrench.torque().y(), source_wrench.torque().z())));
       }
+#endif
 
       // set wrenches
       geometry_msgs::Wrench wrench;
+#if GAZEBO_MAJOR_VERSION >= 7
       wrench.force.x = force.X();
       wrench.force.y = force.Y();
       wrench.force.z = force.Z();
       wrench.torque.x = torque.X();
       wrench.torque.y = torque.Y();
       wrench.torque.z = torque.Z();
+#else
+      wrench.force.x = force.x;
+      wrench.force.y = force.y;
+      wrench.force.z = force.z;
+      wrench.torque.x = torque.x;
+      wrench.torque.y = torque.y;
+      wrench.torque.z = torque.z;
+#endif
 #ifdef PUB_DEBUG_CONTACT_STATE
       state.wrenches.push_back(wrench);
 #endif
@@ -591,25 +690,44 @@ void GazeboRosTactile::OnContact()
       // ///////////////////////BEGIN OF FORCE TRANSFORMTION
       // transform contact positions into relative frame
       // set contact positions
-      gazebo::math::Vector3 position = frame_rot.RotateVectorReverse(
-        math::Vector3(contact.position(j).x(), contact.position(j).y(), contact.position(j).z()) - frame_pos);
       geometry_msgs::Vector3 contact_position;
+#if GAZEBO_MAJOR_VERSION >= 7
+      ignition::math::Vector3d position = frame_rot.RotateVectorReverse(
+        ignition::math::Vector3d(contact.position(j).x(), contact.position(j).y(), contact.position(j).z()) - frame_pos);
       contact_position.x = position.X();
       contact_position.y = position.Y();
       contact_position.z = position.Z();
+#else
+      gazebo::math::Vector3 position = frame_rot.RotateVectorReverse(
+        math::Vector3(contact.position(j).x(), contact.position(j).y(), contact.position(j).z()) - frame_pos);
+      contact_position.x = position.x;
+      contact_position.y = position.y;
+      contact_position.z = position.z;
+#endif
 #ifdef PUB_DEBUG_CONTACT_STATE
       state.contact_positions.push_back(contact_position);
 #endif
 
       // rotate normal from world into user specified frame.
       // frame_rot is identity if world is used.
+#if GAZEBO_MAJOR_VERSION >= 7
+      ignition::math::Vector3d normal = frame_rot.RotateVectorReverse(
+        ignition::math::Vector3d(contact.normal(j).x(), contact.normal(j).y(), contact.normal(j).z()));
+#else
       math::Vector3 normal = frame_rot.RotateVectorReverse(
         math::Vector3(contact.normal(j).x(), contact.normal(j).y(), contact.normal(j).z()));
+#endif
       // set contact normals
       geometry_msgs::Vector3 contact_normal;
+#if GAZEBO_MAJOR_VERSION >= 7
       contact_normal.x = (switch_body ? 1.0:-1.0) * normal.X();
       contact_normal.y = (switch_body ? 1.0:-1.0) * normal.Y();
       contact_normal.z = (switch_body ? 1.0:-1.0) * normal.Z();
+#else
+      contact_normal.x = (switch_body ? 1.0:-1.0) * normal.x;
+      contact_normal.y = (switch_body ? 1.0:-1.0) * normal.y;
+      contact_normal.z = (switch_body ? 1.0:-1.0) * normal.z;
+#endif
 #ifdef PUB_DEBUG_CONTACT_STATE
       state.contact_normals.push_back(contact_normal);
 
@@ -618,10 +736,17 @@ void GazeboRosTactile::OnContact()
 #endif
       // //////////////////////////////////END OF FORCE TRANSFORMATION
 
+#if GAZEBO_MAJOR_VERSION >= 7
       normalForceScalar =
                 (contact_normal.x * force.X() +
                  contact_normal.y * force.Y() +
                  contact_normal.z * force.Z()) * (-1.0);
+#else
+      normalForceScalar =
+                (contact_normal.x * force.x +
+                 contact_normal.y * force.y +
+                 contact_normal.z * force.z) * (-1.0);
+#endif
       for (unsigned int m = 0; m < this->numOfSensors; m++)
       {                                                          // Loop over Sensors
         ROS_DEBUG_STREAM_NAMED("oncontact", " processing sensor " << m);
@@ -631,9 +756,19 @@ void GazeboRosTactile::OnContact()
           // this->tactile_state_msg_.sensors[m];
 
           // calc distance between force-ap and taxelcenter
+#if GAZEBO_MAJOR_VERSION >= 7
           distance = position.Distance(taxelPositions[m][k]);
-
           forceDirection = force.Dot(this->taxelNormals[m][k]);
+#else
+          distance =
+            sqrt(pow((position.x - taxelPositions[m][k].x), 2) + pow((position.y - taxelPositions[m][k].y), 2) +
+                 pow((position.z - taxelPositions[m][k].z), 2));
+          forceDirection =
+                (force.x * this->taxelNormals[m][k].x +
+                 force.y * this->taxelNormals[m][k].y +
+                 force.z * this->taxelNormals[m][k].z);
+#endif
+          
 
           if ((distance < critDist) && (forceDirection < 0) && (normalForceScalar > 0))  // TODO(Dennis): not nessecarry
           {
