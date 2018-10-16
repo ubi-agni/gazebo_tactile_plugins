@@ -300,8 +300,8 @@ void GazeboRosContact::OnContact()
   average_position.z = 0;
   geometry_msgs::Vector3 total_normal;
   total_normal.x = 0;
-  total_normal.x = 0;
-  total_normal.x = 0;
+  total_normal.y = 0;
+  total_normal.z = 0;
 
   this->contact_state_msg_.states.clear();
 
