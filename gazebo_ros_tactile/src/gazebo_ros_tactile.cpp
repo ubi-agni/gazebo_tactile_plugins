@@ -119,14 +119,14 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   collision_name_ = parentName + "::" + local_name_ + "_collision";
   ROS_INFO_STREAM("default collision name: " << collision_name_);
 
-  // try access the real collision name used for the contact sensor (one level up from the plugin sdf)
+  // try access the real/given collision name used for the contact sensor (one level up from the plugin sdf)
   if (_sdf->GetParent()->HasElement("contact"))
   {
     if (_sdf->GetParent()->GetElement("contact")->HasElement("collision"))
     {
       collision_name_ = _sdf->GetParent()->GetElement("contact")->GetElement("collision")->Get<std::string>();
       collision_name_ = parentName + "::" + collision_name_;
-      ROS_INFO_STREAM("real collision name from sdf: " << collision_name_);
+      ROS_INFO_STREAM("real/given collision name from sdf: " << collision_name_);
     }
   }
 
@@ -153,10 +153,11 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
 
   this->rosnode_ = new ros::NodeHandle(this->robot_namespace_);
 
-  // resolve tf prefix
+  // resolve tf prefix, for publishing a correct frame_id in the messages. 
+  // DO NOT use it for internal computations as there is no such tf_prefix in gazebo.
   std::string prefix;
   this->rosnode_->getParam(std::string("tf_prefix"), prefix);
-  this->frame_name_ = tf::resolve(prefix, this->frame_name_);
+  this->frame_id_name_ = tf::resolve(prefix, this->frame_name_);
 
   // Begin parsing
   try
@@ -335,12 +336,10 @@ void GazeboRosTactile::TransformFrameInit()
   {
     // look through all models in the world, search for body
     // name that matches frameName
-    ROS_DEBUG_STREAM("Model currently available:");
     for (physics::Model_V::iterator iter = all_models.begin(); iter != all_models.end(); iter++)
     {
       if (*iter)
       {
-        ROS_DEBUG_STREAM("modelname: " << (*iter)->GetName());
         this->my_link_ = boost::dynamic_pointer_cast<physics::Link>((*iter)->GetLink(this->frame_name_));
       }
       if (this->my_link_)
@@ -353,6 +352,21 @@ void GazeboRosTactile::TransformFrameInit()
       ROS_INFO("gazebo_ros_bumper plugin: frameName: %s does not exist"
                " using world",
                this->frame_name_.c_str());
+      ROS_DEBUG_STREAM("Model currently available:");
+      for (physics::Model_V::iterator iter = all_models.begin(); iter != all_models.end(); iter++)
+      {
+        if (*iter)
+        {
+          ROS_DEBUG_STREAM(" modelname: " << (*iter)->GetName());
+          physics::Link_V all_links = (*iter)->GetLinks();
+          ROS_DEBUG_STREAM("  available links :");
+          for (physics::Link_V::iterator liter = all_links.begin();
+                liter != all_links.end(); ++liter)
+          {
+            ROS_DEBUG_STREAM("   scope name: " << (*liter)->GetScopedName() << " | name: "<< (*liter)->GetName());
+          }
+        }
+      }
     }
   }
 
@@ -404,7 +418,7 @@ void GazeboRosTactile::OnContact()
   msgs::Contacts contacts;
   contacts = this->parentSensor->Contacts();
   /// \TODO: need a time for each Contact in i-loop, they may differ
-  this->tactile_state_msg_.header.frame_id = this->frame_name_;
+  this->tactile_state_msg_.header.frame_id = this->frame_id_name_;
 #if GAZEBO_MAJOR_VERSION >= 7
   common::Time meastime = this->parentSensor->LastMeasurementTime();
 #else
@@ -412,7 +426,7 @@ void GazeboRosTactile::OnContact()
 #endif
   this->tactile_state_msg_.header.stamp = ros::Time(meastime.sec, meastime.nsec);
 #ifdef PUB_DEBUG_CONTACT_STATE
-  this->contact_state_msg_.header.frame_id = this->frame_name_;
+  this->contact_state_msg_.header.frame_id = this->frame_id_name_;
   this->contact_state_msg_.header.stamp = ros::Time(meastime.sec, meastime.nsec);
 #endif
 

@@ -207,7 +207,7 @@ void GazeboRosContact::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   // resolve tf prefix
   std::string prefix;
   this->rosnode_->getParam(std::string("tf_prefix"), prefix);
-  this->frame_name_ = tf::resolve(prefix, this->frame_name_);
+  this->frame_id_name_ = tf::resolve(prefix, this->frame_name_);
 
   this->tactile_pub_ =
     this->rosnode_->advertise<tactile_msgs::TactileContact>(std::string(this->tactile_topic_name_), 1);
@@ -237,8 +237,8 @@ void GazeboRosContact::OnContact()
   contacts = this->parentSensor->Contacts();
 
   // define frame_name and stamp
-  this->tactile_contact_msg_.header.frame_id = this->frame_name_;
-  this->contact_state_msg_.header.frame_id = this->frame_name_;
+  this->tactile_contact_msg_.header.frame_id = this->frame_id_name_;
+  this->contact_state_msg_.header.frame_id = this->frame_id_name_;
 
   ros::Time contact_time;
   common::Time gazebotime = this->world_->GetSimTime();

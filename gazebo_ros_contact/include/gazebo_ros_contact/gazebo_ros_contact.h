@@ -76,7 +76,8 @@ namespace gazebo
     private: physics::WorldPtr world_;
     private: physics::LinkPtr local_link_;  //!< link to which the sensor is attached (and in which force and torques are given)
     private: physics::LinkPtr my_link_; //!< user selected frame/link for the result in which all data should be transformed
-    private: std::string frame_name_;
+    private: std::string frame_name_;  //!< name of user selected frame for the result in which all data should be transformed
+    private: std::string frame_id_name_; //!< same as frame_name_ but resolved for tf_prefix
     private: std::string local_name_;
     private: std::string collision_name_;  //!< collision name matching the local_link (user selected in the sdf) and might differ from local_name
     private: bool skip_local_transform_;

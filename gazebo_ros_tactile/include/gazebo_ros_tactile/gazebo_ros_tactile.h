@@ -103,7 +103,8 @@ private:
 private:
   physics::LinkPtr my_link_;  //!< user selected frame/link for the result in which all data should be transformed
 private:
-  std::string frame_name_;
+  std::string frame_name_;  //!< name of user selected frame for the result in which all data should be transformed
+  std::string frame_id_name_; //!< same as frame_name_ but resolved for tf_prefix
 
 private:
   std::string local_name_;
