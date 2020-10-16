@@ -64,7 +64,9 @@ GZ_REGISTER_SENSOR_PLUGIN(GazeboRosTactile)
 
 // //////////////////////////////////////////////////////////////////////////////
 // Constructor
-GazeboRosTactile::GazeboRosTactile() : SensorPlugin(), is_initialized_(false)
+GazeboRosTactile::GazeboRosTactile() : SensorPlugin()
+  ,is_initialized_(false)
+  ,update_rate_(TACT_PLUGIN_DEFAULT_UPDATE_RATE)
 {
 }
 
@@ -110,7 +112,18 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   if (_sdf->HasElement("tactileTopicName"))
     this->tactile_topic_name_ = _sdf->GetElement("tactileTopicName")->Get<std::string>();
 
-// "get the body (link) name to which the sensor is attached"
+  if (_sdf->HasElement("updateRate"))
+  {
+    this->update_rate_ = _sdf->GetElement("updateRate")->Get<double>();
+    if (this->update_rate_ < 0.0)
+      this->update_rate_ = 0;
+  }
+  if (this->update_rate_ == 0)
+    this->update_period_ = 0.0;
+  else
+    this->update_period_ = common::Time(0, common::Time::SecToNano(1.0/this->update_rate_));
+  this->last_update_time_ = common::Time(0);
+// get the body (link) name to which the sensor is attached
 #if GAZEBO_MAJOR_VERSION >= 7
   std::string parentName = _parent->ParentName();
 #else
@@ -471,6 +484,11 @@ void GazeboRosTactile::OnContact()
 #else
   common::Time meastime = this->parentSensor->GetLastMeasurementTime();
 #endif
+  // handle updateRate
+  if (meastime - this->last_update_time_ < this->update_period_)
+    return;
+  this->last_update_time_ = meastime;
+
   this->tactile_state_msg_.header.stamp = ros::Time(meastime.sec, meastime.nsec);
 #ifdef PUB_DEBUG_CONTACT_STATE
   this->contact_state_msg_.header.frame_id = this->frame_id_name_;

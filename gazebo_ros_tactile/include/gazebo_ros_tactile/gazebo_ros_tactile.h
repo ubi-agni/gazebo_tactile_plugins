@@ -55,6 +55,8 @@
 #include <urdf_tactile/tactile.h>
 #include <urdf/sensor.h>
 
+#define TACT_PLUGIN_DEFAULT_UPDATE_RATE  10.0
+
 namespace gazebo
 {
 
@@ -114,6 +116,9 @@ private:
 
 private:
   std::string local_name_;
+  double update_rate_;
+  common::Time update_period_;
+  common::Time last_update_time_;
 
 private:
   std::string collision_name_;  //!< collision name matching the local_link (user selected in the sdf) and might differ
