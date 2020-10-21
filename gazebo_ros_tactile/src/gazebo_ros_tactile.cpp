@@ -66,6 +66,7 @@ GZ_REGISTER_SENSOR_PLUGIN(GazeboRosTactile)
 // Constructor
 GazeboRosTactile::GazeboRosTactile() : SensorPlugin()
   ,is_initialized_(false)
+  ,use_gaussianDistribution_(true)
   ,update_rate_(TACT_PLUGIN_DEFAULT_UPDATE_RATE)
 {
 }
@@ -103,7 +104,7 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   this->robot_namespace_ = "";
   if (_sdf->HasElement("robotNamespace"))
     this->robot_namespace_ = _sdf->GetElement("robotNamespace")->Get<std::string>() + "/";
-#ifdef PUB_DEBUG_CONTACT_STATE
+#ifdef PUB_DEBUG_CONTACT_STATE 
   this->bumper_topic_name_ = "bumper_states";
   if (_sdf->HasElement("bumperTopicName"))
     this->bumper_topic_name_ = _sdf->GetElement("bumperTopicName")->Get<std::string>();
@@ -111,6 +112,57 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   this->tactile_topic_name_ = "tactile_states";
   if (_sdf->HasElement("tactileTopicName"))
     this->tactile_topic_name_ = _sdf->GetElement("tactileTopicName")->Get<std::string>();
+  if (_sdf->HasElement("constantDistribution"))
+  {
+    this->use_gaussianDistribution_ = false;
+    sdf::ElementPtr constantElement = _sdf->GetElement("constantDistribution");
+    if (constantElement->HasElement("distance"))
+    {
+      this->maxDistance_ =  constantElement->GetElement("distance")->Get<double>();
+    }
+    else
+    {
+      this->maxDistance_ = TACT_PLUGIN_DEFAULT_MAXDISTANCE;
+      ROS_INFO_STREAM("no distance parameter found, using default value: " << TACT_PLUGIN_DEFAULT_MAXDISTANCE);
+    }
+    if (constantElement->HasElement("angle"))
+    {
+      double maxAngle = constantElement->GetElement("angle")->Get<double>();
+      this->minAngleProjection_ = std::cos(maxAngle/180.0 * M_PI);
+    }
+    else
+    {
+      this->minAngleProjection_ = std::cos(TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD);
+      ROS_INFO_STREAM("no angle parameter found, using default value: " << TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD);
+    }
+  }
+  else
+  {
+    double stdDev;
+    this->gaussianDistanceCoefficient_ = 2 * TACT_PLUGIN_DEFAULT_MAXDISTANCE * TACT_PLUGIN_DEFAULT_MAXDISTANCE;
+    this->gaussianAngleCoefficient_ = 2 * TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD * TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD;
+    if (_sdf->HasElement("gaussianDistribution"))
+    {
+      sdf::ElementPtr gaussianElement = _sdf->GetElement("gaussianDistribution");
+      if (gaussianElement->HasElement("distance"))
+      {
+        stdDev = gaussianElement->GetElement("distance")->Get<double>();
+        this->gaussianDistanceCoefficient_ = 2 * stdDev * stdDev;
+      }
+      else
+        ROS_INFO_STREAM("no distance parameter found, using default value: " << TACT_PLUGIN_DEFAULT_MAXDISTANCE);
+
+      if (gaussianElement->HasElement("angle"))
+      {
+        stdDev = gaussianElement->GetElement("angle")->Get<double>();
+        this->gaussianAngleCoefficient_ = 2 * stdDev * stdDev;
+      }
+      else
+        ROS_INFO_STREAM("no angle parameter found, using default value: " << TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD);
+    }
+    else
+      ROS_WARN_STREAM("No distribution selected for tactile plugin, using default gaussian distribution");
+  }
 
   if (_sdf->HasElement("updateRate"))
   {
@@ -477,6 +529,9 @@ void GazeboRosTactile::OnContact()
 
   msgs::Contacts contacts;
   contacts = this->parentSensor->Contacts();
+  ROS_DEBUG_STREAM_NAMED("oncontact_start", "number of contacts: " << contacts.contact_size());
+
+  
   /// \TODO: need a time for each Contact in i-loop, they may differ
   this->tactile_state_msg_.header.frame_id = this->frame_id_name_;
 #if GAZEBO_MAJOR_VERSION >= 7
@@ -486,7 +541,8 @@ void GazeboRosTactile::OnContact()
 #endif
   // handle updateRate
   if (meastime - this->last_update_time_ < this->update_period_)
-    return;
+    return;  // currently we discard data, maybe accumulating on top of the accumulation that
+             // gazebo internally does between sensor calls might be useful
   this->last_update_time_ = meastime;
 
   this->tactile_state_msg_.header.stamp = ros::Time(meastime.sec, meastime.nsec);
@@ -568,12 +624,8 @@ void GazeboRosTactile::OnContact()
   unsigned int contactGroupSize;
 
   double normalForceScalar;
-  const double stdDev = 0.005;
   double distance;
-  const double critDist = 1.0;
 
-  double p = 1.0;  // Multiplicator
-  const double pi = 3.14159265359;
   double minForce = 0.0;
   double p_sum = 0.0;
   double forceDirection = 0.0;
@@ -597,7 +649,7 @@ void GazeboRosTactile::OnContact()
     state.collision1_name = contact.collision1();
     state.collision2_name = contact.collision2();
     std::ostringstream stream;
-    stream << "Debug:  i:(" << i << "/" << contactsPacketSize
+    stream << "Debug:  i:(" << i+1 << "/" << contactsPacketSize
            << ")     my geom:" << state.collision1_name
            << "   other geom:" << state.collision2_name << "         time:"
            << ros::Time(contact.time().sec(), contact.time().nsec())
@@ -736,17 +788,24 @@ void GazeboRosTactile::OnContact()
         math::Vector3(contact.normal(j).x(), contact.normal(j).y(), contact.normal(j).z()));
 #endif
       // set contact normals
-      geometry_msgs::Vector3 contact_normal;
 #if GAZEBO_MAJOR_VERSION >= 7
-      contact_normal.x = (switch_body ? 1.0:-1.0) * normal.X();
-      contact_normal.y = (switch_body ? 1.0:-1.0) * normal.Y();
-      contact_normal.z = (switch_body ? 1.0:-1.0) * normal.Z();
+      normal = (switch_body ? 1.0:-1.0) * normal;
 #else
-      contact_normal.x = (switch_body ? 1.0:-1.0) * normal.x;
-      contact_normal.y = (switch_body ? 1.0:-1.0) * normal.y;
-      contact_normal.z = (switch_body ? 1.0:-1.0) * normal.z;
+      normal.x = (switch_body ? 1.0:-1.0) * normal.x;
+      normal.y = (switch_body ? 1.0:-1.0) * normal.y;
+      normal.z = (switch_body ? 1.0:-1.0) * normal.z;
 #endif
 #ifdef PUB_DEBUG_CONTACT_STATE
+      geometry_msgs::Vector3 contact_normal;
+#if GAZEBO_MAJOR_VERSION >= 7
+      contact_normal.x = normal.X();
+      contact_normal.y = normal.Y();
+      contact_normal.z = normal.Z();
+#else
+      contact_normal.x = normal.x;
+      contact_normal.y = normal.y;
+      contact_normal.z = normal.z;
+#endif
       state.contact_normals.push_back(contact_normal);
 
       // set contact depth, interpenetration
@@ -754,86 +813,126 @@ void GazeboRosTactile::OnContact()
 #endif
       // //////////////////////////////////END OF FORCE TRANSFORMATION
 
+      // compute force amplitude along the contact normal (discard shear force)
 #if GAZEBO_MAJOR_VERSION >= 7
-      normalForceScalar =
-                (contact_normal.x * force.X() +
-                 contact_normal.y * force.Y() +
-                 contact_normal.z * force.Z()) * (-1.0);
+      normalForceScalar = normal.Dot(force) * (-1.0);
 #else
       normalForceScalar =
                 (contact_normal.x * force.x +
                  contact_normal.y * force.y +
                  contact_normal.z * force.z) * (-1.0);
 #endif
+      ROS_DEBUG_STREAM_NAMED("oncontact", " normalForceScalar  " << normalForceScalar);
+      
+      // reset the sum of the distribution for this new contact
+      p_sum = 0.0;
+      std::vector<std::vector<float> > sensorForces;  // temporary vector of distributed force over all taxels of all sensors
       for (unsigned int m = 0; m < this->numOfSensors; m++)
       {                                                          // Loop over Sensors
+        std::vector<float> taxelForces(this->numOfTaxels[m], 0.0);  // temporary vector of distributed force over all taxels of this sensor
         ROS_DEBUG_STREAM_NAMED("oncontact", " processing sensor " << m);
         for (unsigned int k = 0; k < this->numOfTaxels[m]; k++)  // Loop over taxels
         {
-          // sensor_msgs::ChannelFloat32 &tSensor =
-          // this->tactile_state_msg_.sensors[m];
-
-          // calc distance between force-ap and taxelcenter
 #if GAZEBO_MAJOR_VERSION >= 7
+          // distance between force application point and taxelcenter
           distance = position.Distance(taxelPositions[m][k]);
-          forceDirection = force.Dot(this->taxelNormals[m][k]);
+          // compute angle between normal at application point and taxelnormal, to handle curvature
+          forceDirection = normal.Dot(this->taxelNormals[m][k]);
 #else
+          // distance between force application point and taxelcenter
           distance =
             sqrt(pow((position.x - taxelPositions[m][k].x), 2) + pow((position.y - taxelPositions[m][k].y), 2) +
                  pow((position.z - taxelPositions[m][k].z), 2));
+          // compute angle between normal at application point and taxelnormal, to handle curvature
           forceDirection =
-                (force.x * this->taxelNormals[m][k].x +
-                 force.y * this->taxelNormals[m][k].y +
-                 force.z * this->taxelNormals[m][k].z);
+                (normal.x * this->taxelNormals[m][k].x +
+                 normal.y * this->taxelNormals[m][k].y +
+                 normal.z * this->taxelNormals[m][k].z);
 #endif
-          
-
-          if ((distance < critDist) && (forceDirection < 0) && (normalForceScalar > 0))  // TODO(Dennis): not nessecarry
+          // considering pushing only, sensors detecting pulling forces are not considered,
+          // because gazebo does not simulate stickyness
+          if (normalForceScalar > 0)
           {
-            // Normalverteilung erzeugen
-            p = exp(-(distance * distance / (2 * stdDev * stdDev)));  // /
-                                                                      // sqrt(2 * pi * stdDev * stdDev);
-            this->tactile_state_msg_.sensors[m].values[k] += p * normalForceScalar;
-            p_sum += p;
+            if (use_gaussianDistribution_ )
+            {
+              // Normal distribution relative to distance
+              double p = exp(-(distance * distance / gaussianDistanceCoefficient_));  // normalization to one is done discretly later   / sqrt(2 * pi * stdDev * stdDev);
+              // Normal distribution relative to angle
+              ROS_DEBUG_STREAM_NAMED("oncontact", " gaussianDist  " << p );
+              double p_ang = exp(-((1.0 - forceDirection) * (1.0 - forceDirection) / gaussianAngleCoefficient_));
+              ROS_DEBUG_STREAM_NAMED("oncontact", " gaussianAngle  " << p_ang);
+              p *= p_ang;
+              // distribute the force to the taxel
+              taxelForces[k] = p * normalForceScalar;
+              // sum the discrete contributions for future normalization (depends on density of the taxels under that contact and maxDistance_)
+              p_sum += p;
+              ROS_DEBUG_STREAM_NAMED("oncontact", " cell: " << k << " p: " << p << " p sum: " << p_sum);
+            }
+            else
+            { // binary decisions on consideration of this force for the current taxel
+              // considering only contacts closer than maxDistance
+              // binary direction check, to consider curvature
+              if (distance < maxDistance_ && forceDirection > minAngleProjection_)
+              {
+                taxelForces[k] = normalForceScalar;
+                p_sum += 1;
+              }
+              else
+              {
+                if (distance >= maxDistance_)
+                  ROS_DEBUG_STREAM_NAMED("oncontact", " not contributing to cell " << k << " which is too far away (" << distance << ">" << maxDistance_ << ")");
+                if (forceDirection <= std::cos(TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD))
+                  ROS_DEBUG_STREAM_NAMED("oncontact", " not contributing to cell " << k << " forceDirection is not close enough to taxel normal");
+              }
+            }
           }
           else
           {
-            if (distance >= critDist)
-              ROS_DEBUG_STREAM_NAMED("oncontact", " not contributing to cell " << k << " which is too far away (" << distance << ">" << critDist << ")");
-            if (forceDirection > 0)
-              ROS_DEBUG_STREAM_NAMED("oncontact", " not contributing to cell " << k << " forceDirection is not pushing");
-            if (normalForceScalar <= 0)
-              ROS_DEBUG_STREAM_NAMED("oncontact", " not contributing to cell " << k << " normalForceScalar negative");
+            ROS_DEBUG_STREAM_NAMED("oncontact", " not contributing to cell " << k << " normalForceScalar negative");
           }
         }  // END FOR Taxels
+        sensorForces.push_back(taxelForces);
       }    // END FOR Sensors
+      // normalize the pressure distribution to keep the sum of the distributed amplitudes over all taxels equal to the force amplitude of that contact
+      if (p_sum == 0) 
+      {
+        // store the vector zero
+        for (unsigned int e = 0; e < this->numOfSensors; e++)
+          this->tactile_state_msg_.sensors[e].values = sensorForces[e];
+      }
+      else
+      {
+        for (unsigned int e = 0; e < this->numOfSensors; e++)
+        {
+          for (unsigned int f = 0; f < this->numOfTaxels[e]; f++)
+          {
+            this->tactile_state_msg_.sensors[e].values[f] += sensorForces[e][f]/ p_sum;
+          }
+        }
+      }
     }      // END FOR contactGroupSize
 #ifdef PUB_DEBUG_CONTACT_STATE
     state.total_wrench = total_wrench;
+
     this->contact_state_msg_.states.push_back(state);
 #endif
   }  // END FOR contactsPacketSize
 
-  // devide by sum of weights and check if sensed force is bigger minForce
-  for (unsigned int e = 0; e < this->numOfSensors; e++)
+  // Average over all contactPackets. Since gazebo accumulates contactPackets over each step between 2 calls of the plugin,
+  // a different update_rate would artificially augment the distributed force if one does not average.
+  // no averaging should be done on contactGroups because multiple contacts can occur during a single step and their contribution
+  // should be added.
+  if (contactGroupSize > 0)
   {
-    for (unsigned int f = 0; f < this->numOfTaxels[e]; f++)
+    for (unsigned int e = 0; e < this->numOfSensors; e++)
     {
-      if (p_sum > 0)
+      for (unsigned int f = 0; f < this->numOfTaxels[e]; f++)
       {
-        this->tactile_state_msg_.sensors[e].values[f] /= p_sum;
-
-        if (this->tactile_state_msg_.sensors[e].values[f] < minForce)
-        {
-          this->tactile_state_msg_.sensors[e].values[f] = 0.0f;
-        }
-      }
-      else
-      {
-        this->tactile_state_msg_.sensors[e].values[f] = 0.0;
+        this->tactile_state_msg_.sensors[e].values[f] /= contactGroupSize;
       }
     }
   }
+
 #ifdef PUB_DEBUG_CONTACT_STATE
   this->contact_pub_.publish(this->contact_state_msg_);
 #endif

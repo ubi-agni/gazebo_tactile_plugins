@@ -55,7 +55,9 @@
 #include <urdf_tactile/tactile.h>
 #include <urdf/sensor.h>
 
+#define TACT_PLUGIN_DEFAULT_MAXDISTANCE  0.005
 #define TACT_PLUGIN_DEFAULT_UPDATE_RATE  10.0
+#define TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD  0.52// 30.0
 
 namespace gazebo
 {
@@ -154,6 +156,7 @@ private:
 
 private:
   bool is_initialized_;
+  bool use_gaussianDistribution_;
   void TransformFrameInit();
 
   // for Parsing
@@ -167,7 +170,11 @@ private:
 #endif
   unsigned int numOfSensors;
   std::vector<unsigned int> numOfTaxels;
-  float forceSensitivity;
+  double forceSensitivity;
+  double gaussianDistanceCoefficient_;  // gaussian parameter of the distribution of force to neighbouring cells
+  double gaussianAngleCoefficient_;  // gaussian parameter of the distribution of force to neighbouring cells
+  double maxDistance_;  // binary parameter of the distribution of force to neighbouring cells
+  double minAngleProjection_;  // binary parameter of the distribution of force to neighbouring cells
 };
 }  // namespace gazebo
 
