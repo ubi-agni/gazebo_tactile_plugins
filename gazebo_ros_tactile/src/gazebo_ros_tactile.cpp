@@ -68,6 +68,7 @@ GazeboRosTactile::GazeboRosTactile() : SensorPlugin()
   ,is_initialized_(false)
   ,use_gaussianDistribution_(true)
   ,update_rate_(TACT_PLUGIN_DEFAULT_UPDATE_RATE)
+  ,minForce_(TACT_PLUGIN_DEFAULT_MINFORCE)
 {
 }
 
@@ -163,6 +164,9 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
     else
       ROS_WARN_STREAM("No distribution selected for tactile plugin, using default gaussian distribution");
   }
+
+  if (_sdf->HasElement("minForce"))
+    this->minForce_ = _sdf->GetElement("minForce")->Get<double>();
 
   if (_sdf->HasElement("updateRate"))
   {
@@ -521,6 +525,7 @@ void GazeboRosTactile::OnContact()
   if (this->tactile_pub_.getNumSubscribers() <= 0)
     return;
 #endif
+
   // initialize transform frames once
   if (!is_initialized_)
   {
@@ -626,7 +631,6 @@ void GazeboRosTactile::OnContact()
   double normalForceScalar;
   double distance;
 
-  double minForce = 0.0;
   double p_sum = 0.0;
   double forceDirection = 0.0;
 
@@ -929,6 +933,9 @@ void GazeboRosTactile::OnContact()
       for (unsigned int f = 0; f < this->numOfTaxels[e]; f++)
       {
         this->tactile_state_msg_.sensors[e].values[f] /= contactGroupSize;
+        // apply filtering
+        if (this->tactile_state_msg_.sensors[e].values[f] < minForce_)
+          this->tactile_state_msg_.sensors[e].values[f] = 0.0;
       }
     }
   }
