@@ -55,14 +55,13 @@
 #include <urdf_tactile/tactile.h>
 #include <urdf/sensor.h>
 
-#define TACT_PLUGIN_DEFAULT_MINFORCE  0.0
-#define TACT_PLUGIN_DEFAULT_MAXDISTANCE  0.005
-#define TACT_PLUGIN_DEFAULT_UPDATE_RATE  10.0
-#define TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD  0.52// 30.0
+#define TACT_PLUGIN_DEFAULT_MINFORCE 0.0
+#define TACT_PLUGIN_DEFAULT_MAXDISTANCE 0.005
+#define TACT_PLUGIN_DEFAULT_UPDATE_RATE 10.0
+#define TACT_PLUGIN_DEFAULT_ANGLE_THRESHOLD 0.52  // 30.0
 
 namespace gazebo
 {
-
 /// \brief A Bumper controller
 class GazeboRosTactile : public SensorPlugin
 {
@@ -71,12 +70,10 @@ public:
   GazeboRosTactile();
 
   /// Destructor
-public:
   ~GazeboRosTactile();
 
   /// \brief Load the plugin
   /// \param take in SDF root element
-public:
   void Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf);
 
   /// Update the controller
@@ -84,78 +81,46 @@ private:
   void OnContact();
 
   /// \brief pointer to ros node
-private:
   ros::NodeHandle* rosnode_;
 
 #ifdef PUB_DEBUG_CONTACT_STATE
-private:
   ros::Publisher contact_pub_;
 #endif
-
-  // my publisher
-private:
   ros::Publisher tactile_pub_;
-
-private:
   sensors::ContactSensorPtr parentSensor;
 
   /// \brief set topic name of broadcast
-private:
   std::string bumper_topic_name_;
-
-private:
   std::string tactile_topic_name_;
 
-private:
   physics::WorldPtr world_;
-
-private:
   physics::LinkPtr local_link_;  //!< link to which the sensor is attached (and in which force and torques are given)
-private:
-  physics::LinkPtr my_link_;  //!< user selected frame/link for the result in which all data should be transformed
-private:
-  std::string frame_name_;  //!< name of user selected frame for the result in which all data should be transformed
-  std::string frame_id_name_; //!< same as frame_name_ but resolved for tf_prefix
-
-private:
+  physics::LinkPtr my_link_;     //!< user selected frame/link for the result in which all data should be transformed
+  std::string frame_name_;       //!< name of user selected frame for the result in which all data should be transformed
+  std::string frame_id_name_;    //!< same as frame_name_ but resolved for tf_prefix
   std::string local_name_;
   double update_rate_;
   common::Time update_period_;
   common::Time last_update_time_;
-
-private:
   std::string collision_name_;  //!< collision name matching the local_link (user selected in the sdf) and might differ
                                 //!< from local_name
-private:
   bool skip_local_transform_;
 
 #ifdef PUB_DEBUG_CONTACT_STATE
   /// \brief broadcast some string for now.
-private:
   gazebo_msgs::ContactsState contact_state_msg_;
 #endif
   // new Message where to write in
-private:
   tactile_msgs::TactileState tactile_state_msg_;
 
   /// \brief for setting ROS name space
-private:
   std::string robot_namespace_;
-
-private:
   ros::CallbackQueue contact_queue_;
-
-private:
   void ContactQueueThread();
-
-private:
   boost::thread callback_queue_thread_;
 
   // Pointer to the update event connection
-private:
   event::ConnectionPtr update_connection_;
-
-private:
   bool is_initialized_;
   bool use_gaussianDistribution_;
   void TransformFrameInit();
@@ -173,10 +138,10 @@ private:
   std::vector<unsigned int> numOfTaxels;
   double forceSensitivity;
   double gaussianDistanceCoefficient_;  // gaussian parameter of the distribution of force to neighbouring cells
-  double gaussianAngleCoefficient_;  // gaussian parameter of the distribution of force to neighbouring cells
-  double maxDistance_;  // binary parameter of the distribution of force to neighbouring cells
-  double minAngleProjection_;  // binary parameter of the distribution of force to neighbouring cells
-  double minForce_;  // parameter of the filtering;
+  double gaussianAngleCoefficient_;     // gaussian parameter of the distribution of force to neighbouring cells
+  double maxDistance_;                  // binary parameter of the distribution of force to neighbouring cells
+  double minAngleProjection_;           // binary parameter of the distribution of force to neighbouring cells
+  double minForce_;                     // parameter of the filtering;
 };
 }  // namespace gazebo
 
