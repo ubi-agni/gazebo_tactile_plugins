@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" 
+       xmlns:sensor="http://playerstage.sourceforge.net/gazebo/xmlschema/#sensor"
+       xmlns:controller="http://playerstage.sourceforge.net/gazebo/xmlschema/#controller"
+       name="ubi" >
+
+  <gazebo reference="ffdistal">
+    <sensor type="contact" name="ffdistal_sensor">
+      <always_on>1</always_on>
+      <!-- use update_rate equal to simulation rate to trigger the plugin at each sim step
+           use a rate lower than simulation rate to slow down the tactile publication rate
+           ALL contacts arriving between 2 refresh are CONSIDERED and AVERAGED -->
+      <update_rate>100.0</update_rate>
+      <contact>
+        <collision>ffdistal_collision</collision>
+        <topic>ffdistal_collision</topic>
+      </contact>
+      <plugin name="ffdistal_gazebo_ros_tactile_controller" filename="libgazebo_ros_tactile.so">
+        <alwaysOn>true</alwaysOn>
+        <frameName>ffdistal</frameName>
+        <!-- use updateRate of 0 to run at the same speed as the update_rate (recommended)
+             or set a value smaller than update_rate to slow down the tactile publication rate
+             WARNING: with non-zero, ALL contacts arriving between 2 refresh are DISCARDED, only the latest is kept -->
+        <updateRate>0.0</updateRate>
+        <!-- Optional (default 0.0=no filtering): filter values below minForce (set them to 0.0) -->
+        <minForce>0.0</minForce>
+        <!-- Optional (default) define a gaussian distribution for the contact force -->
+        <gaussianDistribution>
+          <!-- Optional (default = 0.005): standard deviation for the distribution over distance in meter -->
+          <distance>0.005</distance>
+          <!-- Optional (default = 0.52): standard deviation for the distribution over angle to taxel normal in radian -->
+          <angle>0.26</angle>
+        </gaussianDistribution>
+        <!-- Optional a constant distribution means contact force are distributed evenly on each cell
+          * closer than the given distance in meter
+          * closer to the normal than the given angle in radian
+          <constantDistribution>
+          <distance>0.005</distance>
+          <angle>0.26</angle>
+        </constantDistribution>
+        -->
+        <bumperTopicName>contacts/ff/distal</bumperTopicName>
+        <tactileTopicName>tactile/ff/distal</tactileTopicName>
+      </plugin>
+    </sensor>
+    <selfCollide>true</selfCollide>
+  </gazebo>    
+</robot>
+
