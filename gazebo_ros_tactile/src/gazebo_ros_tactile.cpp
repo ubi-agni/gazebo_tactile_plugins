@@ -521,6 +521,8 @@ void GazeboRosTactile::OnContact()
 
   msgs::Contacts contacts;
   contacts = this->parentSensor->Contacts();
+  std::vector<std::vector<float> > sensorForces;  // temporary vector of distributed force over all taxels of all
+                                                  // sensors
   ROS_DEBUG_STREAM_NAMED("oncontact_start", "number of contacts: " << contacts.contact_size());
 
   /// \TODO: need a time for each Contact in i-loop, they may differ
@@ -811,8 +813,7 @@ void GazeboRosTactile::OnContact()
 
       // reset the sum of the distribution for this new contact
       p_sum = 0.0;
-      std::vector<std::vector<float> > sensorForces;  // temporary vector of distributed force over all taxels of all
-                                                      // sensors
+      sensorForces.clear();
       for (unsigned int m = 0; m < this->numOfSensors; m++)
       {  // Loop over Sensors
         std::vector<float> taxelForces(this->numOfTaxels[m],
@@ -845,9 +846,9 @@ void GazeboRosTactile::OnContact()
                                                                                       // discretly later   / sqrt(2 * pi
                                                                                       // * stdDev * stdDev);
               // Normal distribution relative to angle
-              ROS_DEBUG_STREAM_NAMED("oncontact", " gaussianDist  " << p);
+              ROS_DEBUG_STREAM_NAMED("oncontact", "distance:" << distance << " gaussianDist  " << p);
               double p_ang = exp(-((1.0 - forceDirection) * (1.0 - forceDirection) / gaussianAngleCoefficient_));
-              ROS_DEBUG_STREAM_NAMED("oncontact", " gaussianAngle  " << p_ang);
+              ROS_DEBUG_STREAM_NAMED("oncontact", "angle:" << (1.0 - forceDirection) << " gaussianAngle  " << p_ang);
               p *= p_ang;
               // distribute the force to the taxel
               taxelForces[k] = p * normalForceScalar;
@@ -885,14 +886,9 @@ void GazeboRosTactile::OnContact()
       }  // END FOR Sensors
       // normalize the pressure distribution to keep the sum of the distributed amplitudes over all taxels equal to the
       // force amplitude of that contact
-      if (p_sum == 0)
+      if (p_sum != 0)
       {
-        // store the vector zero
-        for (unsigned int e = 0; e < this->numOfSensors; e++)
-          this->tactile_state_msg_.sensors[e].values = sensorForces[e];
-      }
-      else
-      {
+        ROS_DEBUG_STREAM_NAMED("oncontact_per_force", "contact:" << i << " contact group:" << j <<  " normalForceScalar  " << normalForceScalar << " p_sum "<< p_sum);
         for (unsigned int e = 0; e < this->numOfSensors; e++)
         {
           for (unsigned int f = 0; f < this->numOfTaxels[e]; f++)
@@ -913,13 +909,13 @@ void GazeboRosTactile::OnContact()
   // plugin, a different update_rate would artificially augment the distributed force if one does not average.
   // no averaging should be done on contactGroups because multiple contacts can occur during a single step and their
   // contribution should be added.
-  if (contactGroupSize > 0)
+  if (contactsPacketSize > 0)
   {
     for (unsigned int e = 0; e < this->numOfSensors; e++)
     {
       for (unsigned int f = 0; f < this->numOfTaxels[e]; f++)
       {
-        this->tactile_state_msg_.sensors[e].values[f] /= contactGroupSize;
+        this->tactile_state_msg_.sensors[e].values[f] /= contactsPacketSize;
         // apply filtering
         if (this->tactile_state_msg_.sensors[e].values[f] < minForce_)
           this->tactile_state_msg_.sensors[e].values[f] = 0.0;
