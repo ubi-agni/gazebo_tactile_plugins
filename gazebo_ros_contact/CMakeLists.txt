@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.1.3)
 project(gazebo_ros_contact)
 
 ## Find catkin macros and libraries
@@ -6,6 +6,7 @@ project(gazebo_ros_contact)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   gazebo_ros
+  gazebo_plugins
   roscpp
   tactile_msgs
 )
@@ -13,7 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 find_package(gazebo REQUIRED)
 find_package(Boost REQUIRED COMPONENTS thread)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GAZEBO_CXX_FLAGS}")
+add_compile_options(${GAZEBO_CXX_FLAGS})
 
 ###################################
 ## catkin specific configuration ##
@@ -28,8 +29,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GAZEBO_CXX_FLAGS}")
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES gazebo_ros_contact
-  CATKIN_DEPENDS gazebo_ros roscpp tactile_msgs
-  DEPENDS gazebo 
+  CATKIN_DEPENDS gazebo_ros gazebo_plugins roscpp tactile_msgs
+  DEPENDS GAZEBO
 )
 
 ###########
