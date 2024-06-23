@@ -52,8 +52,7 @@
 #include <ignition/math/Quaternion.hh>
 #endif
 
-#include <urdf_tactile/tactile.h>
-#include <urdf/sensor.h>
+#include <urdf_tactile/sensor.h>
 
 #define TACT_PLUGIN_DEFAULT_MINFORCE 0.0
 #define TACT_PLUGIN_DEFAULT_MAXDISTANCE 0.005
@@ -126,7 +125,7 @@ private:
   void TransformFrameInit();
 
   // for Parsing
-  urdf::SensorMap sensors;
+  urdf::tactile::SensorMap sensors;
 #if GAZEBO_MAJOR_VERSION >= 7
   std::vector<std::vector<ignition::math::Vector3d>> taxelNormals;
   std::vector<std::vector<ignition::math::Vector3d>> taxelPositions;

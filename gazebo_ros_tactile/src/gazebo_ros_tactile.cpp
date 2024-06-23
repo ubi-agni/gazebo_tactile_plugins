@@ -50,9 +50,7 @@
 #include <sensor_msgs/ChannelFloat32.h>
 #include <tf/tf.h>
 
-#include <urdf/sensor.h>
-#include <urdf_tactile/tactile.h>
-#include <urdf_tactile/cast.h>
+#include <urdf_tactile/parser.h>
 
 namespace gazebo
 {
@@ -232,11 +230,7 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   // Begin parsing
   try
   {
-    if (robot_namespace_ != "")
-      this->sensors =
-          urdf::parseSensorsFromParam(robot_namespace_ + "/robot_description", urdf::getSensorParser("tactile"));
-    else
-      this->sensors = urdf::parseSensorsFromParam("/robot_description", urdf::getSensorParser("tactile"));
+    this->sensors = urdf::tactile::parseSensorsFromParam(robot_namespace_ + "/robot_description");
   }
   catch (const std::runtime_error& e)
   {
@@ -257,7 +251,7 @@ void GazeboRosTactile::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   {
     ROS_DEBUG_STREAM("sensorName tactile " << it->second->name_);
     ROS_DEBUG_STREAM("sensorName gz " << gzSensorName);
-    urdf::tactile::TactileSensorConstSharedPtr sensor = urdf::tactile::tactile_sensor_cast(it->second);
+    const urdf::tactile::TactileSensorConstSharedPtr &sensor = it->second;
     if (!sensor)
       continue;  // some other sensor than tactile
 
